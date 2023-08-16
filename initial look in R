@@ -134,5 +134,39 @@ girafe(print(plt))
 #LASSO 
 
 #LASSO (Least Absolute Shrinkage and Selection Operator) regression analysis on the experiment1
+#to predict the variable "density(g/L)" using the previous set of variables.
+
+experiment1_ml <-experiment1 |> 
+  filter(!is.na(`density(g/L)`))
+
+cv_density <- cv.glmnet(
+  y = experiment1_ml[["density(g/L)"]],
+  x = model.matrix(~., experiment1_ml[, c(variables)]),
+  alpha = 1
+)
+plot(cv_density)
+
+
+# To Calculate the coefficients of the LASSO regression model that corresponds to the optimal 
+#lambda value ("lambda.min") determined by cross-validation.
+
+coef(cv_firm, s = "lambda.min")
+
+# To visualize the coefficients and their signs (positive or negative correlation) for 
+#the predictor variables in a LASSO regression model that has undergone cross-validation.
+
+coef(cv_firm, s = "lambda.min") |>
+  as.matrix() |>
+  as_tibble(rownames = "coef") |>
+  filter(coef != "(Intercept)") |>
+  arrange(abs(s1)) |>
+  mutate(coef = fct_inorder(coef)) |>
+  mutate(s1_sign = if_else(sign(s1) == 1, "Positive Correlation", "Negative Correlation")) |>
+  ggplot() +
+  aes(y = coef, x = abs(s1), fill = s1_sign) +
+  geom_col()+
+  labs(title='Variables predictive for density',
+       fill='',
+       y='')
 
 
