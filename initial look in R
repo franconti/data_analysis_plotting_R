@@ -1,0 +1,138 @@
+#Protein experimet data: initial look
+
+#Loading required packages
+library("ggVennDiagram")
+library(GGally)
+library(kableExtra)
+library(ggiraph)
+library(tidyverse)
+
+#set the theme of the plots to the "classic" theme provided by the ggplot2 package.
+theme_set(theme_classic())
+
+######################################
+#LOADING DATA FROM EXCEL
+
+#reads the 3 data files, converts date columns to time (need clock library)
+
+analytics <- readxl::read_xlsx("/Users/data_analytics.xlsx") |>
+  mutate(date = clock::date_parse(date, format = "%d/%m/%y"))
+  )
+
+preconditions <- readxl::read_xlsx("/Users/panchoconti/Documents/data_preconditions.xlsx") |>
+  mutate(date = clock::date_parse(date, format = "%d/%m/%y"))
+
+protein <- readxl::read_xlsx("/Users/data_protein.xlsx") |>
+  mutate(date = clock::date_parse(date, format = "%d/%m/%y"))
+
+setup <- readxl::read_xlsx("/Users/data_setup.xlsx") |>
+  mutate(date = clock::date_parse(date, format = "%d/%m/%y"))
+
+
+#merge all the tables in one.
+
+full <- analytics %>%
+  left_join(protein, by = c("name", "date")) |>
+  left_join(preconditions, by = c("name", "date")) |>
+  left_join(setup, by = c("name", "date"))
+
+
+
+
+######################################
+#PLOTS
+
+# Density plots of outcome variables
+
+#To generates a series of histograms showcasing the variability in measurements among different experiment groups. 
+#The main objective is to visually emphasize the differences and variations in data distribution across these groups,
+#highlighting the concept of considerable variability between them.
+
+outcome_figure <- analytics |>
+  pivot_longer(cols = -c(name, date, group), names_to = "measurement") |>
+  ggplot() +
+  aes(x = value, fill = as.factor(group)) +
+  geom_histogram() +
+  facet_grid(~measurement, scales = "free") +
+  labs(
+    fill = "",
+    title = "Considerable variability between experiment-groups"
+  )
+
+ggplot(tvp) +
+  aes(x = `water(g/g)`, y = `bulk_density(g/L)`, col = group) +
+  geom_point()+
+  geom_smooth(method='lm')
+
+
+# Here we use GGally package to create a matrix of scatter plots and density plots for the specified columns of the dataset 
+#The purpose of this code is to visualize relationships and distributions among variables while distinguishing different groups using color.
+
+GGally::ggpairs(tvp,
+  columns = c("water(g/g)", "density(g/L)", "firmness(N)"),
+  mapping = aes(col = group)
+)
+
+
+
+
+
+# After exploring all the data, let's narrow our focus to a specific experiment.
+
+#lets select the experiment 
+experiment1 <- full |>
+  filter(group == "experiment1")
+
+# And let's visualize the relationship between two variables, "water(g/g)" and "density(g/L)"
+# The scatter plot also incorporates color differentiation based on the "protein used" column.
+
+experiment1 |>
+  ggplot() +
+  aes(x = `water(g/g)`, y = `density(g/L)`, col=`protein used`) +
+  geom_point()
+
+
+# to perform a linear regression, we use lm function to model the relationship between
+#the dependent variable "density(g/L)" and the independent variable "protein used" within the dataset experiment1. 
+#The summary function is then used to display the summary statistics and analysis results of the linear regression model.
+
+summary(lm(`density(g/L)` ~ `protein used`, data = experiment1))
+
+
+######################################
+#Correlations 
+
+
+#To Create an interactive correlation heatmap using the ggplot2 package and the girafe package for interactivity.
+The heatmap visualizes the correlation coefficients between selected variables from the dataset
+
+#lets select the variables of the data set that we want to plot
+variables <- c("protein used", "water(l/h)", "speed(rpm)", "variableA(Wh)", "variableB(Kg)", "pressure(bar)")
+
+#This variable assignment starts a series of operations to create the correlation heatmap adding new variables to compare
+
+plt<-cor(model.matrix(~0+., experiment1[, c("water(g/g)", "density(g/L)",variables)])) |> 
+  as_tibble(rownames = 'par1') |> 
+  pivot_longer(-par1,names_to='par2') |> 
+  mutate(par1=str_remove_all(par1,'`')) |> 
+  mutate(par2=str_remove_all(par2,'`')) |> 
+  mutate(par1=fct_rev(fct_inorder(factor(par1)))) |> 
+  mutate(par2=fct_rev(fct_inorder(factor(par2)))) |> 
+  mutate(tooltip=str_c(par1, par2, round(value,2),sep = '\n')) |> 
+  ggplot()+
+  aes(fill=value, x=par1, y=par2, tooltip=tooltip)+
+  scale_fill_gradient2(low='red', high='green',mid='grey',limits=c(-1,1))+
+  geom_tile_interactive()+
+  theme(axis.text.x = element_text(angle=90,hjust = 1))+
+  labs(x='',
+       y='',
+       fill='Correlation')
+girafe(print(plt))
+
+
+######################################
+#LASSO 
+
+#LASSO (Least Absolute Shrinkage and Selection Operator) regression analysis on the experiment1
+
+
